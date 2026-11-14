@@ -172,7 +172,7 @@ Tool hỗ trợ 3 tầng thu hình CAPTCHA theo thứ tự ưu tiên để đạ
 2. **Luồng `adb exec-out screencap` thô tốc độ cao** nếu bản Android của giả lập không hỗ trợ `screenrecord`.
 3. **Chụp khung game 16:9 của cửa sổ giả lập trên Windows** làm phương án dự phòng cuối.
 
-Nếu một lượt tráo quá chồng lấp chưa đủ độ tin cậy hoặc hiện lại nút **START**, tool tự thử lại tối đa 3 lần trước khi tạm dừng chờ người chơi. Tối đa 10 bản ghi `.mp4` chưa chọn gần nhất được giữ trong `logs` để kiểm tra lại bằng `captcha.py`.
+Nếu bộ dò báo `no selection (too little consistent tracking evidence; ...)`, tool chạm **cốc trên cùng (top)** rồi chờ **10 giây**. Các lỗi khác (hoặc khi hiện lại nút **START**) thì thử lại sau 3 giây. Tối đa 3 lần; nếu sau lần thứ 3 vẫn còn CAPTCHA, tool dừng tự giải và chờ người chơi giải tay. Tối đa 10 bản ghi `.mp4` chưa chọn gần nhất được giữ trong `logs` để kiểm tra lại bằng `captcha.py`.
 
 ### Kỹ năng hồi máu khẩn cấp Smith & cơ chế giả lập thao tác người thật (`--humanize`)
 

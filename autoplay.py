@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from ad_closer import AdCloser, KEYCODE_BACK
-from bluestacks_captcha import watch_target
+from bluestacks_captcha import TOP_FALLBACK, watch_target
 from captcha import VIEWPORT
 from emulator import (
     AD_OVERLAY_PACKAGES,
@@ -131,6 +131,10 @@ SKIP_POINTS = {10: SKIP_10_POINT, 20: SKIP_20_POINT, 30: SKIP_30_POINT}
 SKIP_GEM_THRESHOLD = 30
 SKILL_CAST_INTERVAL = 0.20
 ADB_FRAME_INTERVAL = 0.18
+CAPTCHA_MAX_ATTEMPTS = 3
+CAPTCHA_RETRY_DELAY = 3.0
+# After a no-evidence round taps the top cup, wait this long before retrying.
+CAPTCHA_FALLBACK_WAIT = 10.0
 # Allow post-wave guild/ranking notices to clear before opening a Hero slot.
 WAVE_HERO_HOME_WAIT = 4.0
 SKIP_SLOTS = (
@@ -1200,6 +1204,8 @@ def play(args, target, report, journal):
 
     captcha_attempts = 0
     last_captcha_attempt = float("-inf")
+    captcha_retry_delay = CAPTCHA_RETRY_DELAY
+    captcha_manual_notified = False
     last_cast_sent_at = None
     for time, original in frames:
         normalized = viewport(original)
@@ -1239,30 +1245,45 @@ def play(args, target, report, journal):
         action = player.feed(time, screen)
         if not player.paused:
             captcha_attempts = 0
+            captcha_retry_delay = CAPTCHA_RETRY_DELAY
+            captcha_manual_notified = False
         elif auto_captcha and screen.name == "captcha":
-            ready_for_retry = (
-                not was_paused
-                or (monotonic() - last_captcha_attempt >= 3.0
-                    and vision.captcha_start_visible(original))
-            )
-            if ready_for_retry and captcha_attempts < 3:
+            waited = monotonic() - last_captcha_attempt >= captcha_retry_delay
+            if captcha_attempts >= CAPTCHA_MAX_ATTEMPTS:
+                # Still on the CAPTCHA after the last attempt (and its wait): stop
+                # trying and leave it to the player.
+                if waited and not captcha_manual_notified:
+                    report(time, f"CAPTCHA: still present after {CAPTCHA_MAX_ATTEMPTS} attempts; "
+                                 "stopped, waiting for manual solution")
+                    captcha_manual_notified = True
+            elif not was_paused or (waited and vision.captcha_start_visible(original)):
                 captcha_attempts += 1
                 attempt_started = monotonic()
                 last_captcha_attempt = attempt_started
                 limit = min(25, args.seconds - time) if args.seconds else 25
+                label = f"{captcha_attempts}/{CAPTCHA_MAX_ATTEMPTS}"
                 try:
                     selected = limit > 0 and watch_target(
                         target, limit, True,
                         start_screen=vision.captcha_start_visible,
                     )
                 except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-                    report(time + monotonic() - attempt_started, f"CAPTCHA attempt {captcha_attempts}/3 stopped: {exc}")
+                    report(time + monotonic() - attempt_started, f"CAPTCHA attempt {label} stopped: {exc}")
                     selected = False
                 last_captcha_attempt = monotonic()
-                if selected:
-                    report(time + monotonic() - attempt_started, "CAPTCHA: selection sent; waiting for the game to resume")
-                elif captcha_attempts >= 3:
-                    report(time + monotonic() - attempt_started, "CAPTCHA: waiting for manual solution")
+                elapsed = time + last_captcha_attempt - attempt_started
+                if selected == TOP_FALLBACK:
+                    captcha_retry_delay = CAPTCHA_FALLBACK_WAIT
+                    report(elapsed, f"CAPTCHA attempt {label}: no selection, tapped the top cup; "
+                                    f"waiting {CAPTCHA_FALLBACK_WAIT:.0f}s")
+                elif selected:
+                    captcha_retry_delay = CAPTCHA_RETRY_DELAY
+                    report(elapsed, "CAPTCHA: selection sent; waiting for the game to resume")
+                else:
+                    captcha_retry_delay = CAPTCHA_RETRY_DELAY
+                    if captcha_attempts >= CAPTCHA_MAX_ATTEMPTS:
+                        report(elapsed, "CAPTCHA: waiting for manual solution")
+                        captcha_manual_notified = True
         if action:
             if action.keyevent is not None:
                 if args.tap:
