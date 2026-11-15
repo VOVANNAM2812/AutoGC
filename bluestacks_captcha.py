@@ -22,6 +22,7 @@ from captcha import (
     BOARD_SIZE,
     CENTER,
     Detector,
+    SLOT_NAMES,
     VIEWPORT,
     board_image,
     format_result,
@@ -48,6 +49,9 @@ START_POINT = (925, 580)
 CAPTURE_FPS = 36
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _CAPTCHA_RNG = random.SystemRandom()
+# Returned (truthy) when no cup was detected and the top cup was tapped instead.
+TOP_FALLBACK = "top-fallback"
+NO_EVIDENCE_REASON = "too little consistent tracking evidence"
 
 
 class _RecordingUnavailableError(RuntimeError):
@@ -119,6 +123,27 @@ def tap_cup(adb, serial, result, captured_board):
         raise RuntimeError("The cups are no longer ready for a selection.")
     x, y = tap_point(adb, serial, frame, result.coordinate, jitter=(5.0, 6.0))
     print(f"Sent one tap to {serial} at ({x}, {y}).", flush=True)
+
+
+def top_fallback(result):
+    """Return a copy of ``result`` aimed at the top cup when detection lacked evidence.
+
+    Only applies to "no selection (too little consistent tracking evidence ...)";
+    other failures (e.g. the cup layout did not settle) return None.
+    """
+    if result.coordinate is not None or not result.reason.startswith(NO_EVIDENCE_REASON):
+        return None
+    return replace(result, final_slot=SLOT_NAMES.index("top"))
+
+
+def tap_top_fallback(adb, serial, result, captured_board):
+    """Tap the top cup for a no-evidence round. Returns TOP_FALLBACK or False."""
+    fallback = top_fallback(result)
+    if fallback is None:
+        return False
+    print("CAPTCHA: no selection (too little evidence); tapping the top cup as a fallback.", flush=True)
+    tap_cup(adb, serial, fallback, captured_board)
+    return TOP_FALLBACK
 
 
 def verify_start(frame, gem, start_screen):
@@ -218,7 +243,7 @@ def solve_from_adb_recording(adb, serial, start_screen):
                 if result is not None:
                     print(f"Round 1: {format_result(result)}", flush=True)
                     if result.coordinate is None:
-                        return False
+                        return tap_top_fallback(adb, serial, result, board)
                     tap_cup(adb, serial, result, board)
                     selected = True
                     return True
@@ -409,10 +434,10 @@ def solve_from_adb_screencap_stream(adb, serial, start_screen):
             result = detector.feed_board(timestamp, board)
             if result is not None:
                 print(f"Round 1: {format_result(result)}", flush=True)
-                if result.coordinate is None:
-                    return False
                 if monotonic() - start - result.end_time > 4:
                     raise RuntimeError("Prediction is stale. Run the detector again.")
+                if result.coordinate is None:
+                    return tap_top_fallback(adb, serial, result, board)
                 tap_cup(adb, serial, result, board)
                 selected = True
                 return True
@@ -518,6 +543,8 @@ def watch_target(target: EmulatorTarget, duration: float, tap: bool, start_scree
                     tap_cup(target.adb, target.serial, result, board)
                     selected = True
                     return True
+                if tap and (fallback := tap_top_fallback(target.adb, target.serial, result, board)):
+                    return fallback
                 if start_screen is not None:
                     return False
     finally:
