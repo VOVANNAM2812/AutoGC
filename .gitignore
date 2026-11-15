@@ -1,0 +1,16 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Per-instance Hero upgrade state
+/.hero-upgrade-*.json
+/.hero-upgrade-*.lock
+/.hero-upgrade-*.tmp
+/.hero-slot-upgrade-*.json
+/.hero-slot-upgrade-*.lock
+/.hero-slot-upgrade-*.tmp
+
+# CAPTCHA recordings generated during play
+/logs/growcastle-captcha-*.mp4
+/logs/growcastle-captcha-window-*.npz
