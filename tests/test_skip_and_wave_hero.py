@@ -34,7 +34,7 @@ class SkipSelectionTests(unittest.TestCase):
         frame = Image.new("RGB", (1280, 720))
         offer = Screen("skip", (888, 216), gems=11, skip_options=((10, (469, 365)),))
         with patch.object(autoplay, "ensure_adb_connected", return_value="device"), \
-                patch.object(autoplay, "adb_frames", return_value=iter([(0, frame)])), \
+                patch.object(autoplay, "adb_frames", return_value=iter([(0, frame, None)])), \
                 patch.object(autoplay, "foreground_window", return_value=("com.raongames.growcastle", "game")), \
                 patch.object(autoplay, "Vision") as vision, \
                 patch.object(autoplay, "human_tap", return_value=(469, 365)) as tap, \

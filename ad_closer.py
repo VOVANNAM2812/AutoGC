@@ -456,6 +456,61 @@ def _zncc_search(patch_gray: np.ndarray, kernel: np.ndarray) -> tuple[float, int
     return float(scores[iy, ix]), int(ix), int(iy)
 
 
+class CloseVideoDetector:
+    """Recognize the buttons and reward badge of the landscape Close Video dialog."""
+
+    def __init__(self):
+        path = Path(__file__).with_name("ad_close_video_templates.npz")
+        with np.load(path, allow_pickle=False) as atlas:
+            self.button_mask = self._blue(atlas["buttons"].astype(np.int16))
+            self.reward_text = atlas["reward_text"].astype(np.float32)
+
+    @staticmethod
+    def _blue(rgb):
+        red, green, blue = rgb.transpose(2, 0, 1)
+        return (blue > 120) & (blue - red > 40) & (blue - green > 18)
+
+    @staticmethod
+    def _matches(sample, mask, threshold):
+        overlap = np.count_nonzero(sample & mask)
+        return overlap >= threshold * np.count_nonzero(sample | mask)
+
+    def buttons(self, rgb):
+        # The Close text is blue on white, while Resume has a solid blue fill.
+        # Match the Close text separately so a plain blue rectangle is insufficient.
+        left, top = 498, 422
+        close_x, resume_x, button_y = 570, 762, 445
+        height, width = self.button_mask.shape
+        margin = 16
+        blue = self._blue(rgb[top - margin:top + height + margin, left - margin:left + width + margin])
+        center_x = resume_x - left + margin
+        center_y = button_y - top + margin
+        if blue[center_y - 12:center_y + 12, center_x - 55:center_x + 55].mean() < 0.65:
+            return None
+        close_text = self.button_mask[:, :145]
+        offsets = (0, *(offset for shift in range(1, margin + 1) for offset in (-shift, shift)))
+        for dy in offsets:
+            y = margin + dy
+            for dx in offsets:
+                x = margin + dx
+                sample = blue[y:y + height, x:x + width]
+                if (self._matches(sample[:, :close_text.shape[1]], close_text, 0.70)
+                        and self._matches(sample, self.button_mask, 0.83)):
+                    return (close_x + dx, button_y + dy), (resume_x + dx, button_y + dy)
+        return None
+
+    def reward_visible(self, rgb):
+        # Compare the dark lettering inside the light pill, independently of its X.
+        chrome = Image.fromarray(rgb[6:74, 1060:1250].astype(np.uint8)).convert("L")
+        gray = np.asarray(chrome, dtype=np.float32)
+        score, x, y = _zncc_search(gray, self.reward_text)
+        if score < 0.80:
+            return False
+        height, width = self.reward_text.shape
+        sample = gray[y:y + height, x:x + width]
+        return bool(sample[self.reward_text > 180].mean() >= 155)
+
+
 def _synthetic_x_kernel(size: int, stroke: float = 2.0) -> np.ndarray:
     c = (size - 1) / 2.0
     yy, xx = np.mgrid[0:size, 0:size]

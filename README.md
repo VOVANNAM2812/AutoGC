@@ -8,7 +8,7 @@ Tool Python đọc màn hình Grow Castle để đánh wave tiếp theo, Skip 30
 - **BlueStacks 5** cho chế độ chạy trực tiếp:
   - Trong **Settings → Display**: chọn **Landscape**, độ phân giải **1280 × 720 (16:9)** và **240 DPI** cho từng instance để khớp với ảnh mẫu trong `video2.mp4`.
   - Trong **Settings → Advanced**: bật **Android Debug Bridge (ADB)** cho mọi instance cần chạy auto.
-- **NumPy** và **Pillow** được liệt kê trong [requirements.txt](requirements.txt). Giữ [play_templates.npz](play_templates.npz) và [tower_templates.npz](tower_templates.npz) cùng thư mục với mã nguồn.
+- **NumPy** và **Pillow** được liệt kê trong [requirements.txt](requirements.txt). Giữ [play_templates.npz](play_templates.npz), [tower_templates.npz](tower_templates.npz), [hero_templates.npz](hero_templates.npz) và [ad_close_video_templates.npz](ad_close_video_templates.npz) cùng thư mục với mã nguồn.
 
 Mở PowerShell và chạy các lệnh sau (thay `D:\AutoGC` bằng thư mục dự án của bạn):
 
@@ -81,7 +81,7 @@ Mở một cửa sổ PowerShell riêng cho mỗi giả lập cần chạy và c
 
 Nếu bạn dùng bản BlueStacks 5 di động không ghi Registry, có thể chỉ định trực tiếp đường dẫn bằng `--adb "D:\BlueStacks_nxt\HD-Adb.exe"` và `--conf "D:\BlueStacks_nxt\bluestacks.conf"`.
 
-Chỉ `--tap` mới gửi thao tác bấm. Mỗi instance có khóa phiên riêng (`.autoplay-*.lock`) và nhật ký nâng cấp riêng (`.hero-upgrade-*.json` hoặc `.tower-upgrade-*.json`) theo tên instance nên nhiều phiên chạy song song không xung đột nhau, kể cả khi BlueStacks đổi cổng ADB động sau lần khởi động lại. Trước mỗi cú bấm, tool đều xác nhận Grow Castle đang là ứng dụng hiển thị trên thiết bị đó. Dùng `Ctrl+C` để dừng hoặc thêm `--seconds 60` để giới hạn thời gian chạy.
+Chỉ `--tap` mới gửi thao tác bấm. Mỗi instance có khóa phiên riêng (`.autoplay-*.lock`) và nhật ký nâng cấp riêng (`.hero-slot-upgrade-*.json`, `.hero-upgrade-*.json` hoặc `.tower-upgrade-*.json`) theo tên instance nên nhiều phiên chạy song song không xung đột nhau, kể cả khi BlueStacks đổi cổng ADB động sau lần khởi động lại. Trước mỗi cú bấm, tool xác nhận Grow Castle đang là ứng dụng hiển thị trên thiết bị đó. Dùng `Ctrl+C` để dừng hoặc thêm `--seconds 60` để giới hạn thời gian chạy.
 
 ## 4. Auto play hoạt động thế nào
 
@@ -98,7 +98,18 @@ Chỉ `--tap` mới gửi thao tác bấm. Mỗi instance có khóa phiên riên
 
 Tool lấy ảnh qua ADB, chuẩn hóa ảnh về 1280 × 720 để đối chiếu mẫu, rồi quy đổi tọa độ bấm theo kích thước ảnh thật.
 
-### Nâng Hero hoặc Tháp bằng kim cương
+### Nâng Hero và chừa lại 1 kim cương trắng
+
+Dùng `--upgrade-hero hero-1` đến `--upgrade-hero hero-9` để chọn một trong 9 ô Hero theo thứ tự trái sang phải, trên xuống dưới của các ô kỹ năng trong trận. `hero-5` là ô giữa. Đợt nâng bắt đầu từ **2 kim cương trắng** theo mặc định. Dùng `--hero-min-gems` để đặt ngưỡng khác.
+
+```powershell
+.\.venv\Scripts\python.exe autoplay.py --tap --upgrade-hero hero-5
+.\.venv\Scripts\python.exe autoplay.py --mode replay --tap --upgrade-hero hero-5 --hero-min-gems 20
+```
+
+Tool ưu tiên **LV UP +10** khi đọc được nút và giá, và số dư sau khi trả vẫn còn ít nhất 1 kim cương trắng. Tool kiểm tra đúng Hero, cấp và giá trên khung hình mới trước khi bấm và chỉ nâng tiếp sau khi xác nhận cấp tăng và số dư giảm đúng. Ví dụ, với số dư `16+78` và giá 1 kim cương mỗi cấp, tool nâng tối đa 15 cấp. Lần nâng chưa xác nhận được lưu trong nhật ký riêng của instance để kiểm tra khi chạy lại.
+
+### Nâng Hero hoặc Tháp theo số cấp
 
 Tính năng mặc định tắt. Dùng `--upgrade-hero [SỐ_KC]` để nâng Hero tại ô chọn bằng `--hero-slot 1..12`, hoặc `--upgrade-tower [SỐ_KC]` để nâng tầng tháp thứ hai từ dưới lên, kết hợp cùng bất kỳ chế độ đánh nào (`wave`, `skip`, `replay`). Nếu không truyền số theo sau `--upgrade-hero` / `--upgrade-tower` thì mặc định kích hoạt ở mốc **50 kim cương trắng**. Nếu không chọn ô, Hero mặc định là **ô 3** (góc trên bên phải), tương thích lệnh cũ.
 
@@ -149,7 +160,7 @@ Tool mặc định tự xem quảng cáo thưởng vàng. Dùng `--ads` để b�
 1. Sau khi thắng, tool chờ hộp thưởng xuất hiện trước khi đánh tiếp, nhận diện biểu tượng vàng cùng nút **GET** (có hoặc không có dòng đếm ngược) rồi bấm một lần.
 2. Khi cửa sổ quảng cáo đang hiển thị (AdMob, UnityAds, AppLovin, IronSource, Vungle, Mintegral...), tool tạm dừng vào trận, dùng kỹ năng, giải CAPTCHA và nâng tháp.
 3. Khi quảng cáo phát xong, tool kết hợp 4 lớp để đóng quảng cáo trên cả **màn hình ngang (`16:9`) lẫn quảng cáo xoay dọc (`9:16`)**, hỗ trợ cả **Tiếng Việt lẫn Tiếng Anh**:
-   - Đối chiếu nhanh các mẫu ảnh kết thúc quen thuộc (**Reward granted**, **Learn More**, **Watch now**).
+   - Đối chiếu các mẫu ảnh kết thúc (**Reward granted**, **Learn More**, **Watch now**). Với hộp **Close Video?** trên màn hình ngang, tool nhận diện nút trực tiếp từ ảnh. Tool chọn **CLOSE VIDEO** khi thấy **Reward granted**, và chọn **RESUME VIDEO** khi chưa xác nhận được thưởng.
    - Đọc trực tiếp cây giao diện Android (`uiautomator dump`) để lấy tọa độ thật của nút **Đóng / Close / Bỏ qua / Skip / `>>` / `✕`** hoặc nút cạnh nhãn *Đã trao phần thưởng* (tự chờ nếu còn bộ đếm ngược, và tự bấm **Tiếp tục xem / Resume** nếu hiện hộp thoại cảnh báo mất thưởng).
    - Dò hình học biểu tượng nút **`X`** ở góc trên màn hình cho các quảng cáo WebGL/Canvas không xuất cây UI.
    - Tự gửi phím **BACK** của Android nếu quảng cáo tự bật bảng Google Play đè lên hoặc bị kẹt ở màn kết thúc sau khi đã hết giờ.
@@ -177,10 +188,11 @@ Nếu một lượt tráo quá chồng lấp chưa đủ độ tin cậy hoặc 
 ### Kỹ năng hồi máu khẩn cấp Smith & cơ chế giả lập thao tác người thật (`--humanize`)
 
 - **Tự cast Smith khi máu lâu đài `< 50%`**: Tool theo dõi thanh hồi chiêu của ô Hero **hàng trên cùng ở giữa** `(373, 92)` và mức máu tại mốc `50%` của thanh **Castle HP**. Khi máu `>= 50%` tool giữ nguyên không bấm phí; ngay khi máu tụt `< 50%` sẽ ưu tiên bấm Smith trước tiên.
-- **Cast Hero**: ưu tiên **Smith (`HP < 50%`) → Archer 1 → Archer 2**, rồi mỗi lượt duyệt lại Hero **1..9** (trái sang phải, trên xuống dưới), chọn một Hero sẵn sàng chưa bị khóa. Nhận diện thanh hồi từ chính khung hình hiện tại; chỉ mở khóa sau 2 khung hình trận liên tiếp thấy thanh chưa đầy, hoặc khi thắng/bắt đầu trận mới. Trận cần ổn định tối thiểu **`0.45s`**, khoảng cách giữa các skill ít nhất **`0.20s`**, chu kỳ chụp ADB mục tiêu **`0.18s`**. Nhịp thực tế có thể chậm hơn do thời gian chụp, xử lý ảnh và ADB. Bỏ qua khung hình có tỉ lệ lệch 16:9 quá 3% và tạm dừng cast khi quảng cáo, CAPTCHA hoặc menu đang mở.
+- **Cast skill nhanh**. Tool ưu tiên **Smith (`HP < 50%`) → Archer 1 → Archer 2**, rồi quét Hero **1..9** từ trái sang phải, trên xuống dưới. Mỗi ô được bấm lại sau 2 khung hình trận liên tiếp cho thấy thanh chưa đầy, hoặc khi sang trận mới. Trận cần ổn định ít nhất **`0.45s`**. Trong trận, tool ưu tiên luồng ảnh RGB từ Android, chỉ giữ ảnh mới nhất và xử lý bước chụp song song với lệnh cast trước đó. Nếu giả lập không hỗ trợ luồng ảnh, tool chụp ảnh ADB thô hoặc PNG. Khoảng cách tối thiểu giữa hai lệnh vẫn là **`0.15s`**. Dòng log `TAP cast ...` ghi thời điểm gửi lệnh, nên khoảng cách thực tế còn phụ thuộc vào tốc độ ADB và giả lập. Tool bỏ qua ảnh lệch tỉ lệ 16:9 quá 3% và tạm dừng cast khi quảng cáo, CAPTCHA hoặc menu đang mở.
+- **Chừa skill cho Boss**. Thêm `--boss-skill hero-5` để giữ kỹ năng ô Hero ở giữa đến khi xuất hiện thanh **BOSS**. Chọn một ô từ `hero-1` đến `hero-9` hoặc `archer-1`, `archer-2`.
 - **Mặc định bật `--humanize` khi chạy `--tap`** (có thể tắt bằng `--no-humanize`):
-  - Riêng Hero dùng `adb shell input tap` đúng tâm ô sau khi kiểm tra lại game đang ở foreground, kể cả khi bật `--humanize`. Trong chế độ xem trước, log có dạng `PREVIEW cast skill 1 (293, 184)`.
-  - Smith, Archer và Wave Skip giữ chạm nhanh **`35–60ms`** kèm lệch tọa độ; các nút ngoài trận, nâng cấp, quảng cáo và CAPTCHA giữ chạm tự nhiên (`46–162ms`), độ trượt vi mô (`0–2px`), biến thiên nhịp phản xạ ngoài trận và tự nghỉ ngắn vài giây ở màn chính sau mỗi `18–32` trận.
+  - Smith, Archer và Hero dùng chung một kết nối ADB để bấm đúng tâm ô sau khi kiểm tra game đang ở foreground. Trong chế độ xem trước, log có dạng `PREVIEW cast skill 1 (293, 184)`.
+  - Wave Skip giữ chạm nhanh **`35–60ms`** kèm lệch tọa độ. Các nút ngoài trận, quảng cáo và CAPTCHA dùng chạm tự nhiên (`46–162ms`) với độ trượt vi mô (`0–2px`). Tool thay đổi nhịp thao tác ngoài trận và tự nghỉ ngắn vài giây ở màn chính sau mỗi `18–32` trận.
   - Đặt tên file quay tạm trung lập trong Android (`/data/local/tmp/scr_*.mp4`) và tự xóa sạch sau mỗi lượt CAPTCHA.
 
 ### Bộ dò CAPTCHA độc lập
@@ -218,8 +230,11 @@ Nếu vẫn muốn chạy trên LDPlayer 9, thêm `--emulator ldplayer` hoặc t
 | **Tự động & chống bot** | `--ads` / `--no-ads` | `--ads` | Bật / tắt tự mở và đóng quảng cáo thưởng vàng **GET**. |
 | | `--auto-captcha` / `--no-auto-captcha` | `--auto-captcha` | Bật / tắt tự giải CAPTCHA cốc kim cương khi chạy `--tap`. |
 | | `--humanize` / `--no-humanize` | `--humanize` | Bật / tắt lệch tọa độ chạm tự nhiên, biến thiên thời gian ngoài trận & nghỉ ngắn chống phát hiện bot. |
+| | `--boss-skill SLOT` | Tắt | Chừa một skill đến khi xuất hiện thanh Boss, ví dụ `--boss-skill hero-5`. |
 | **Nâng cấp kim cương** | `--upgrade-hero [GEMS]` | Tắt (`50` nếu bật) | Tự nâng Hero ở ô đã chọn khi kim cương trắng `>= GEMS` (hỗ trợ nút `+10`). |
-| | `--hero-slot {1..12}` | `3` | Chọn ô Hero để nâng; dùng cùng `--upgrade-hero`. Đánh số từ trái sang phải, trên xuống dưới. |
+| | `--upgrade-hero hero-N` | Tắt | Chọn ô `hero-1` đến `hero-9`, tự nâng và chừa lại ít nhất 1 kim cương trắng. |
+| | `--hero-min-gems GEMS` | `2` | Đặt ngưỡng bắt đầu với `--upgrade-hero hero-N`. |
+| | `--hero-slot {1..12}` | `3` | Chọn ô Hero khi dùng `--upgrade-hero [GEMS]`. Đánh số từ trái sang phải, trên xuống dưới. |
 | | `--upgrade-tower [GEMS]` | Tắt (`50` nếu bật) | Tự nâng Tháp tầng 2 lâu đài `(380, 366)` khi kim cương trắng `>= GEMS` (hỗ trợ nút `+10`). |
 | | `--upgrade-gems GEMS` | — | Ghi đè mốc kim cương trắng kích hoạt cho `--upgrade-hero` / `--upgrade-tower`. |
 | | `--upgrade-levels LEVELS` | `max(50, GEMS)` | Số cấp nâng tối đa trong mỗi đợt nâng cấp. |

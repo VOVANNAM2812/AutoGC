@@ -130,6 +130,29 @@ class HeroSlotsTest(unittest.TestCase):
             with self.subTest(flags=flags), patch("sys.stderr"), self.assertRaises(SystemExit):
                 run(*flags)
 
+    def test_cli_accepts_named_hero_with_gem_reserve(self):
+        for extra_flags, minimum in (([], 2), (["--hero-min-gems", "20"], 20)):
+            with self.subTest(minimum=minimum), \
+                    patch("sys.argv", ["autoplay.py", "--video", "preview.mp4",
+                                       "--upgrade-hero", "hero-5", *extra_flags]), \
+                    patch.object(autoplay, "play") as play:
+                autoplay.main()
+                args = play.call_args.args[0]
+                self.assertEqual(args.upgrade_hero, "hero-5")
+                self.assertEqual(args.hero_min_gems, minimum)
+
+    def test_cli_rejects_mismatched_hero_options(self):
+        for flags in (("--upgrade-hero", "hero-10"),
+                      ("--hero-min-gems", "20"),
+                      ("--upgrade-hero", "30", "--hero-min-gems", "20"),
+                      ("--upgrade-hero", "hero-5", "--hero-min-gems", "1"),
+                      ("--upgrade-hero", "hero-5", "--hero-slot", "1"),
+                      ("--upgrade-hero", "hero-5", "--upgrade-gems", "20"),
+                      ("--upgrade-hero", "hero-5", "--upgrade-levels", "10")):
+            with self.subTest(flags=flags), patch("sys.argv", ["autoplay.py", *flags]), \
+                    patch("sys.stderr"), self.assertRaises(SystemExit):
+                autoplay.main()
+
 
 if __name__ == "__main__":
     unittest.main()
