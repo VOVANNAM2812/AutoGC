@@ -142,6 +142,7 @@ SKIP_POINTS = {10: SKIP_10_POINT, 20: SKIP_20_POINT, 30: SKIP_30_POINT}
 SKIP_GEM_THRESHOLD = 30
 SKILL_CAST_INTERVAL = 0.15
 ADB_FRAME_INTERVAL = 0.18
+LDPLAYER_CAPTURE_INTERVAL = 0.30
 CAPTCHA_MAX_ATTEMPTS = 3
 CAPTCHA_RETRY_DELAY = 3.0
 # After a no-evidence round taps the top cup, wait this long before retrying.
@@ -1285,10 +1286,10 @@ def capture_raw_screen(adb, serial):
 class BattleCapture:
     """Use a native RGB stream in battle and let ADB screenshots handle other screens."""
 
-    def __init__(self):
+    def __init__(self, *, enabled=True):
         self.stream = None
         self.started_at = None
-        self.available = True
+        self.available = enabled
 
     def next_frame(self, adb, serial, size):
         if not self.available or size is None:
@@ -1316,7 +1317,7 @@ class BattleCapture:
 
 
 def adb_frames(adb, serial, seconds, *, humanize=True, fast_battle=None, focus_worker=None,
-               start=None, battle_capture=None, report=None):
+               start=None, battle_capture=None, report=None, screenshot_interval=None):
     start = monotonic() if start is None else start
     raw_supported = True
     size = None
@@ -1329,10 +1330,12 @@ def adb_frames(adb, serial, seconds, *, humanize=True, fast_battle=None, focus_w
         focus = focus_worker.submit(foreground_window, adb, serial) if in_battle and focus_worker else None
         captured_at = sample
         screen = None
+        streamed = False
         if in_battle and battle_capture is not None and battle_capture.available and size is not None:
             frame = battle_capture.next_frame(adb, serial, size)
             if frame is not None:
                 captured_at, screen = frame
+                streamed = True
                 if not announced_stream and report is not None:
                     report(captured_at - start, f"Battle capture: Android RGB stream ({size[0]}x{size[1]})")
                     announced_stream = True
@@ -1357,6 +1360,10 @@ def adb_frames(adb, serial, seconds, *, humanize=True, fast_battle=None, focus_w
         size = screen.size
         yield captured_at - start, screen, focus
         interval = SKILL_CAST_INTERVAL if in_battle else ADB_FRAME_INTERVAL
+        if screenshot_interval is not None and not streamed:
+            # Pace from the fallback screenshot if stream startup took time.
+            interval = screenshot_interval
+            sample = captured_at
         sleep(max(0, interval - (monotonic() - sample)))
 
 
@@ -1381,8 +1388,11 @@ def _resolve_skip_tier(mode: str, skip_arg: int | bool | None) -> int:
 
 
 def play(args, target, report, journal):
+    stream_enabled = getattr(args, "battle_stream", None)
+    if stream_enabled is None:
+        stream_enabled = target is not None and target.emulator == "bluestacks"
     with (closing(SkillTapShell()) as skill_taps,
-          closing(BattleCapture()) as battle_capture,
+          closing(BattleCapture(enabled=stream_enabled)) as battle_capture,
           ThreadPoolExecutor(max_workers=1) as focus_worker,
           ThreadPoolExecutor(max_workers=1) as cast_worker):
         _play(args, target, report, journal, skill_taps, focus_worker, cast_worker, battle_capture)
@@ -1480,12 +1490,15 @@ def _play(args, target, report, journal, skill_taps, focus_worker, cast_worker, 
             start=live_start,
             battle_capture=battle_capture,
             report=report,
+            screenshot_interval=LDPLAYER_CAPTURE_INTERVAL if target.emulator == "ldplayer" else None,
         )
         print(
             f"{prefix} mode={mode_label} emulator={target.emulator} "
             f"instance={target.instance} ({target.display_name!r}) source={target.serial}",
             flush=True,
         )
+        if target.emulator == "ldplayer" and not battle_capture.available:
+            report(0.0, f"LDPlayer capture: ADB screenshots (min interval {LDPLAYER_CAPTURE_INTERVAL:.2f}s)")
 
     captcha_attempts = 0
     last_captcha_attempt = float("-inf")
@@ -1750,6 +1763,8 @@ def main():
     parser.add_argument("--ldconsole", type=Path, help="path to ldconsole.exe (for LDPlayer 9)")
     parser.add_argument("--list", action="store_true", help="list detected emulator instances and exit")
     parser.add_argument("--seconds", type=float, default=0, help="live capture limit, 0 waits indefinitely")
+    parser.add_argument("--battle-stream", action=argparse.BooleanOptionalAction,
+                        help="use continuous RGB capture in battle (default: on for BlueStacks, off for LDPlayer)")
     parser.add_argument("--tap", action="store_true", help="send the recognized actions to the emulator")
     parser.add_argument("--humanize", action=argparse.BooleanOptionalAction, default=True,
                         help="humanize touch coordinates, press duration, and timing jitter (default: enabled)")

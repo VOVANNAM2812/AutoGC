@@ -188,7 +188,8 @@ Nếu bộ dò báo `no selection (too little consistent tracking evidence; ...)
 ### Kỹ năng hồi máu khẩn cấp Smith & cơ chế giả lập thao tác người thật (`--humanize`)
 
 - **Tự cast Smith khi máu lâu đài `< 50%`**: Tool theo dõi thanh hồi chiêu của ô Hero **hàng trên cùng ở giữa** `(373, 92)` và mức máu tại mốc `50%` của thanh **Castle HP**. Khi máu `>= 50%` tool giữ nguyên không bấm phí; ngay khi máu tụt `< 50%` sẽ ưu tiên bấm Smith trước tiên.
-- **Cast skill nhanh**. Tool ưu tiên **Smith (`HP < 50%`) → Archer 1 → Archer 2**, rồi quét Hero **1..9** từ trái sang phải, trên xuống dưới. Mỗi ô được bấm lại sau 2 khung hình trận liên tiếp cho thấy thanh chưa đầy, hoặc khi sang trận mới. Trận cần ổn định ít nhất **`0.45s`**. Trong trận, tool ưu tiên luồng ảnh RGB từ Android, chỉ giữ ảnh mới nhất và xử lý bước chụp song song với lệnh cast trước đó. Nếu giả lập không hỗ trợ luồng ảnh, tool chụp ảnh ADB thô hoặc PNG. Khoảng cách tối thiểu giữa hai lệnh vẫn là **`0.15s`**. Dòng log `TAP cast ...` ghi thời điểm gửi lệnh, nên khoảng cách thực tế còn phụ thuộc vào tốc độ ADB và giả lập. Tool bỏ qua ảnh lệch tỉ lệ 16:9 quá 3% và tạm dừng cast khi quảng cáo, CAPTCHA hoặc menu đang mở.
+- **Cast skill nhanh**. Tool ưu tiên **Smith (`HP < 50%`) → Archer 1 → Archer 2**, rồi quét Hero **1..9** từ trái sang phải, trên xuống dưới. Mỗi ô được bấm lại sau 2 khung hình trận liên tiếp cho thấy thanh chưa đầy, hoặc khi sang trận mới. Trận cần ổn định ít nhất **`0.45s`**. Tool chụp khung hình kế tiếp song song với lệnh cast trước đó. Khoảng cách tối thiểu giữa hai lệnh là **`0.15s`**. Dòng log `TAP cast ...` ghi thời điểm gửi lệnh, nên khoảng cách thực tế còn phụ thuộc vào tốc độ ADB và giả lập. Tool bỏ qua ảnh lệch tỉ lệ 16:9 quá 3% và tạm dừng cast khi quảng cáo, CAPTCHA hoặc menu đang mở.
+- **Chụp ảnh trên LDPlayer**. Mặc định dùng ảnh ADB rời, cách nhau ít nhất **`0.30s`** để giảm tải giả lập. Thêm `--battle-stream` để bật luồng ảnh RGB liên tục trong trận. BlueStacks bật luồng này theo mặc định. Dùng `--no-battle-stream` để chọn ảnh ADB rời.
 - **Chừa skill cho Boss**. Thêm `--boss-skill hero-5` để giữ kỹ năng ô Hero ở giữa đến khi xuất hiện thanh **BOSS**. Chọn một ô từ `hero-1` đến `hero-9` hoặc `archer-1`, `archer-2`.
 - **Mặc định bật `--humanize` khi chạy `--tap`** (có thể tắt bằng `--no-humanize`):
   - Smith, Archer và Hero dùng chung một kết nối ADB để bấm đúng tâm ô sau khi kiểm tra game đang ở foreground. Trong chế độ xem trước, log có dạng `PREVIEW cast skill 1 (293, 184)`.
@@ -226,6 +227,7 @@ Nếu vẫn muốn chạy trên LDPlayer 9, thêm `--emulator ldplayer` hoặc t
 | | `--mode {wave,replay,skip,skip10,skip20,skip30}` | `wave` | Chọn chế độ: đi `wave` mới, đánh lại `replay` 100%, hoặc đi wave kèm `skip` (`30` / `10` / `20`). |
 | | `--skip [{10,20,30}]` | Tắt (`30` nếu bật không số) | Chọn mốc **10**, **20** hoặc **30 WAVES** ở hộp Wave Skip khi kim cương trắng `>=` mốc đã chọn. |
 | | `--seconds N` | `0` (vô hạn) | Giới hạn thời gian chạy `N` giây rồi tự dừng. |
+| | `--battle-stream` / `--no-battle-stream` | BlueStacks bật, LDPlayer tắt | Bật hoặc tắt luồng ảnh RGB liên tục trong trận. |
 | | `--video FILE` | — | Chạy thử/xem trước quyết định trên file video `.mp4`. |
 | **Tự động & chống bot** | `--ads` / `--no-ads` | `--ads` | Bật / tắt tự mở và đóng quảng cáo thưởng vàng **GET**. |
 | | `--auto-captcha` / `--no-auto-captcha` | `--auto-captcha` | Bật / tắt tự giải CAPTCHA cốc kim cương khi chạy `--tap`. |

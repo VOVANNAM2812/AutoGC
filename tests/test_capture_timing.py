@@ -1,6 +1,8 @@
 """Timing tests for live ADB frame capture."""
 
+from contextlib import nullcontext
 from io import BytesIO
+from pathlib import Path
 import struct
 import unittest
 from unittest.mock import Mock, call, patch
@@ -8,6 +10,7 @@ from unittest.mock import Mock, call, patch
 from PIL import Image
 
 import autoplay
+from emulator import EmulatorTarget
 
 
 class CaptureTimingTests(unittest.TestCase):
@@ -33,6 +36,48 @@ class CaptureTimingTests(unittest.TestCase):
                     self.assertAlmostEqual(second[0], 0.3)
                     self.assertEqual(adb.call_count, 2)
                     self.assertAlmostEqual(sleep.call_args.args[0], expected)
+
+    def test_screenshot_interval_applies_to_battle_and_home(self):
+        png = self.png_frame()
+        for in_battle in (False, True):
+            with self.subTest(in_battle=in_battle), \
+                    patch.object(autoplay, "monotonic", side_effect=[10.0, 10.05, 10.3]), \
+                    patch.object(autoplay, "sleep") as sleep, \
+                    patch.object(autoplay, "adb_run", return_value=png), \
+                    patch.object(autoplay, "capture_raw_screen", return_value=Image.new("RGB", (16, 9))):
+                frames = autoplay.adb_frames(
+                    "adb", "device", 0, start=10.0, fast_battle=lambda: in_battle,
+                    screenshot_interval=0.30,
+                )
+                self.addCleanup(frames.close)
+                next(frames)
+                next(frames)
+                self.assertAlmostEqual(sleep.call_args.args[0], 0.25)
+
+    def test_cli_stream_defaults_and_explicit_overrides(self):
+        cases = (
+            ("ldplayer", (), False),
+            ("ldplayer", ("--battle-stream",), True),
+            ("bluestacks", (), True),
+            ("bluestacks", ("--no-battle-stream",), False),
+        )
+        for emulator, flags, expected in cases:
+            target = EmulatorTarget(emulator=emulator, adb=Path("adb"), serial="device",
+                                    instance="test", display_name="test")
+            argv = ["autoplay.py", "--emulator", emulator, "--tap", *flags]
+            with self.subTest(emulator=emulator, flags=flags), \
+                    patch("sys.argv", argv), \
+                    patch.object(autoplay, "resolve_target", return_value=target), \
+                    patch.object(autoplay, "ensure_adb_connected", return_value=target.serial), \
+                    patch.object(autoplay, "lock_journal", side_effect=lambda *_: nullcontext()), \
+                    patch.object(autoplay, "Vision"), \
+                    patch.object(autoplay, "adb_frames", return_value=iter(())) as capture, \
+                    patch("builtins.print"):
+                autoplay.main()
+                kwargs = capture.call_args.kwargs
+                self.assertEqual(kwargs["battle_capture"].available, expected)
+                if emulator == "ldplayer" and not expected:
+                    self.assertEqual(kwargs["screenshot_interval"], 0.30)
 
     def test_raw_capture_reads_android_headers_and_discards_alpha(self):
         pixel = bytes((1, 23, 45, 67))
