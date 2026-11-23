@@ -562,7 +562,7 @@ def _verify_x_geometry(patch_gray: np.ndarray, cx: int, cy: int, arm_radius: int
 
 
 class VisualCloseDetector:
-    """Detect standalone X close buttons in top corners on both 16:9 and 9:16 screens."""
+    """Detect corner X buttons and the inset close control on the supplied Moxim ad."""
 
     def __init__(self, atlas_path: Path | None = None):
         path = atlas_path or Path(__file__).with_name("play_templates.npz")
@@ -594,6 +594,27 @@ class VisualCloseDetector:
             c = size // 2
             self.synthetic_kernels.append((kern, c, arm_r))
             self.synthetic_kernels.append((-kern, c, arm_r))
+
+        moxim_path = Path(__file__).with_name("ad_moxim_logo.png")
+        self.moxim_logo_template: np.ndarray | None = None
+        if moxim_path.is_file():
+            with Image.open(moxim_path) as logo:
+                logo_gray = logo.convert("L")
+                logo_small = logo_gray.resize(
+                    (round(logo_gray.width * 0.5), round(logo_gray.height * 0.5)),
+                    Image.Resampling.BILINEAR,
+                )
+                self.moxim_logo_template = np.asarray(logo_small, dtype=np.float32)
+        moxim_close_path = Path(__file__).with_name("ad_moxim_close.png")
+        self.moxim_close_template: np.ndarray | None = None
+        if moxim_close_path.is_file():
+            with Image.open(moxim_close_path) as close_icon:
+                close_gray = close_icon.convert("L")
+                close_small = close_gray.resize(
+                    (round(close_gray.width * 0.5), round(close_gray.height * 0.5)),
+                    Image.Resampling.BILINEAR,
+                )
+                self.moxim_close_template = np.asarray(close_small, dtype=np.float32)
 
     def find_close(self, image: Image.Image) -> tuple[int, int] | None:
         orig_w, orig_h = image.size
@@ -639,6 +660,37 @@ class VisualCloseDetector:
                             round((x0 + cx) / scale),
                             round((y0 + cy) / scale),
                         )
+
+        # This Moxim ad has an inset X at the supplied screen coordinate.
+        # The logo is visible while the video plays, so also require the close
+        # icon itself before returning a point or spending a tap attempt.
+        if (self.moxim_logo_template is not None and self.moxim_close_template is not None
+                and norm_w >= 1100 and norm_h >= 650):
+            x0, y0, x1, y1 = 500, 34, min(norm_w, 950), min(norm_h, 210)
+            roi = gray[y0:y1, x0:x1]
+            roi_small = Image.fromarray(np.clip(roi, 0, 255).astype(np.uint8)).resize(
+                (round(roi.shape[1] * 0.5), round(roi.shape[0] * 0.5)),
+                Image.Resampling.BILINEAR,
+            )
+            score, _, _ = _zncc_search(
+                np.asarray(roi_small, dtype=np.float32),
+                self.moxim_logo_template,
+            )
+            if score >= 0.88:
+                close_x0, close_y0, close_x1, close_y1 = 307, 84, 363, 144
+                close_roi = gray[close_y0:close_y1, close_x0:close_x1]
+                close_small = Image.fromarray(
+                    np.clip(close_roi, 0, 255).astype(np.uint8)
+                ).resize(
+                    (round(close_roi.shape[1] * 0.5), round(close_roi.shape[0] * 0.5)),
+                    Image.Resampling.BILINEAR,
+                )
+                close_score, _, _ = _zncc_search(
+                    np.asarray(close_small, dtype=np.float32),
+                    self.moxim_close_template,
+                )
+                if close_score >= 0.88:
+                    return round(335 / scale), round(109 / scale)
         return None
 
 

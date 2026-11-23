@@ -109,6 +109,7 @@ ARCHER_SKILLS = (
     ("archer skill 1", 135, 363, 405),
     ("archer skill 2", 135, 480, 522),
 )
+ALTAR_SKILL_POINT = (118, 180)
 HERO_SKILLS = tuple(
     (f"skill {idx}", x, bar_y, hero_y)
     for idx, (x, bar_y, hero_y) in enumerate(
@@ -774,6 +775,7 @@ class Player:
         humanize=False,
         rng=None,
         boss_skill=None,
+        boss_altar_skill=False,
         hero_upgrade=None,
     ):
         if mode in {"skip", "skip10", "skip20", "skip30"}:
@@ -823,6 +825,8 @@ class Player:
         if boss_skill is not None:
             position = min(boss_skill, len(ARCHER_SKILLS))
             self.boss_skill_order = (*self.skill_order[:position], boss_skill, *self.skill_order[position:])
+        self.boss_altar_skill = bool(boss_altar_skill)
+        self.boss_altar_used = False
         self.mimic_taps = 0
         self.battle_delay = 0.45
         self.home_delay = 0.85
@@ -985,6 +989,7 @@ class Player:
             self.report(time, "Castle HP reached zero: switched to Replay")
         if name == "victory":
             self.skills_used.clear()
+            self.boss_altar_used = False
             self.after_victory = self.watch_ads
         elif name == "battle":
             self.after_victory = False
@@ -1122,6 +1127,7 @@ class Player:
                         return None
                     self.report(time, "Hero balance or slot could not be verified on Home. Continuing autoplay.")
                 self.skills_used.clear()
+                self.boss_altar_used = False
                 if self.mode == "wave":
                     action = Action("start next Battle", (1191, 648))
                 else:
@@ -1156,6 +1162,10 @@ class Player:
         self.observe_skill_bars(ready, smith_ready=smith_ready, ignore_skill=ignore_skill)
         if time - self.last_skill < SKILL_CAST_INTERVAL or time - self.last_mimic < 0.30:
             return None
+        if boss_visible and self.boss_altar_skill and not self.boss_altar_used:
+            self.boss_altar_used = True
+            self.last_skill = time
+            return SkillAction("cast altar skill", ALTAR_SKILL_POINT, slot="altar")
         if smith_ready and hp_low and "smith" not in self.skills_used:
             self.skills_used["smith"] = 0
             self.last_skill = time
@@ -1451,6 +1461,7 @@ def _play(args, target, report, journal, skill_taps, focus_worker, cast_worker, 
     auto_captcha = bool(args.tap and args.auto_captcha)
     boss_slot = getattr(args, "boss_skill", None)
     boss_skill = SKILL_SLOTS.index(boss_slot) if boss_slot is not None else None
+    boss_altar_skill = bool(getattr(args, "boss_altar_skill", False))
     player = Player(
         args.mode,
         report,
@@ -1460,12 +1471,13 @@ def _play(args, target, report, journal, skill_taps, focus_worker, cast_worker, 
         skip_waves=skip_tier,
         humanize=use_humanize,
         boss_skill=boss_skill,
+        boss_altar_skill=boss_altar_skill,
         hero_upgrade=hero_upgrade,
     )
     vision = Vision(
         True,
         skip_tier=skip_tier if is_wave_mode else 0,
-        track_boss=boss_skill is not None,
+        track_boss=boss_skill is not None or boss_altar_skill,
         hero_point=hero_point,
     )
     prefix = "TAP" if args.tap else "PREVIEW"
@@ -1517,6 +1529,8 @@ def _play(args, target, report, journal, skill_taps, focus_worker, cast_worker, 
         if result is None:
             time = monotonic() - live_start
             player.skills_used.pop(action.slot, None)
+            if action.slot == "altar":
+                player.boss_altar_used = False
             player.last_skill = previous_last_skill
             player.invalidate_frame(time)
             report(time, f"{action.name} skipped: game is no longer in the foreground")
@@ -1750,6 +1764,8 @@ def main():
     parser.add_argument("--mode", choices=("wave", "replay", "skip", "skip10", "skip20", "skip30"), default="wave")
     parser.add_argument("--boss-skill", choices=SKILL_SLOTS, metavar="SLOT",
                         help="reserve one skill for BOSS (archer-1, archer-2, or hero-1 to hero-9)")
+    parser.add_argument("--boss-altar-skill", action=argparse.BooleanOptionalAction, default=False,
+                        help="tap the Altar skill at (118, 180) once when BOSS appears")
     parser.add_argument("--skip", nargs="?", const=SKIP_GEM_THRESHOLD, type=int, choices=SKIP_TIERS,
                         metavar="{10,20,30}",
                         help="select 10, 20, or 30 WAVES on Wave Skip when white gems >= tier (default: 30)")

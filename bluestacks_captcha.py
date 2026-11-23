@@ -51,7 +51,6 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _CAPTCHA_RNG = random.SystemRandom()
 # Returned (truthy) when no cup was detected and the top cup was tapped instead.
 TOP_FALLBACK = "top-fallback"
-NO_EVIDENCE_REASON = "too little consistent tracking evidence"
 
 
 class _RecordingUnavailableError(RuntimeError):
@@ -126,22 +125,18 @@ def tap_cup(adb, serial, result, captured_board):
 
 
 def top_fallback(result):
-    """Return a copy of ``result`` aimed at the top cup when detection lacked evidence.
-
-    Only applies to "no selection (too little consistent tracking evidence ...)";
-    other failures (e.g. the cup layout did not settle) return None.
-    """
-    if result.coordinate is not None or not result.reason.startswith(NO_EVIDENCE_REASON):
+    """Return a copy of any no-selection result aimed at the top cup."""
+    if result.coordinate is not None:
         return None
     return replace(result, final_slot=SLOT_NAMES.index("top"))
 
 
 def tap_top_fallback(adb, serial, result, captured_board):
-    """Tap the top cup for a no-evidence round. Returns TOP_FALLBACK or False."""
+    """Tap the top cup for any no-selection round. Returns TOP_FALLBACK or False."""
     fallback = top_fallback(result)
     if fallback is None:
         return False
-    print("CAPTCHA: no selection (too little evidence); tapping the top cup as a fallback.", flush=True)
+    print("CAPTCHA: no selection; tapping the top cup as a fallback.", flush=True)
     tap_cup(adb, serial, fallback, captured_board)
     return TOP_FALLBACK
 
@@ -434,10 +429,10 @@ def solve_from_adb_screencap_stream(adb, serial, start_screen):
             result = detector.feed_board(timestamp, board)
             if result is not None:
                 print(f"Round 1: {format_result(result)}", flush=True)
-                if monotonic() - start - result.end_time > 4:
-                    raise RuntimeError("Prediction is stale. Run the detector again.")
                 if result.coordinate is None:
                     return tap_top_fallback(adb, serial, result, board)
+                if monotonic() - start - result.end_time > 4:
+                    raise RuntimeError("Prediction is stale. Run the detector again.")
                 tap_cup(adb, serial, result, board)
                 selected = True
                 return True

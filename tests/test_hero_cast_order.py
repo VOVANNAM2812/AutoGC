@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 
 import autoplay
-from autoplay import HERO_SKILLS, Player, Screen, Vision, detect_hero_skills, viewport
+from autoplay import ALTAR_SKILL_POINT, HERO_SKILLS, Player, Screen, Vision, detect_hero_skills, viewport
 from emulator import EmulatorTarget
 
 
@@ -80,8 +80,9 @@ class HeroDetectionTests(unittest.TestCase):
 
 
 class HeroDecisionTests(unittest.TestCase):
-    def make_player(self, humanize=False, *, boss_skill=None):
-        return Player("wave", lambda *args: None, watch_ads=False, humanize=humanize, boss_skill=boss_skill)
+    def make_player(self, humanize=False, *, boss_skill=None, boss_altar_skill=False):
+        return Player("wave", lambda *args: None, watch_ads=False, humanize=humanize,
+                      boss_skill=boss_skill, boss_altar_skill=boss_altar_skill)
 
     def test_each_decision_scans_from_hero_one_and_preserves_priority(self):
         player = self.make_player()
@@ -125,6 +126,18 @@ class HeroDecisionTests(unittest.TestCase):
         self.assertIsNone(player.cast(5, (), boss_visible=True))
         self.assertIsNone(player.cast(6, (6,)))
         self.assertEqual(player.cast(7, (6,), boss_visible=True).name, "cast skill 5")
+
+    def test_boss_altar_skill_is_an_optional_one_shot_at_fixed_point(self):
+        player = self.make_player(boss_altar_skill=True)
+        self.assertIsNone(player.cast(0.0, (), boss_visible=False))
+        altar = player.cast(0.5, (), boss_visible=True)
+        self.assertEqual(altar.name, "cast altar skill")
+        self.assertEqual((altar.point, altar.slot), (ALTAR_SKILL_POINT, "altar"))
+        self.assertIsNone(player.cast(0.7, (), boss_visible=True))
+
+    def test_boss_altar_skill_can_be_disabled(self):
+        player = self.make_player()
+        self.assertIsNone(player.cast(0.5, (), boss_visible=True))
 
     def test_mimic_collection_uses_separate_cooldown(self):
         player = self.make_player()
